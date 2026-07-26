@@ -1,0 +1,79 @@
+body {
+    background-image: radial-gradient(circle at center, rgb(20, 20, 20), rgb(35, 35, 35));
+}
+
+h1 {
+    color: grey;
+}
+
+.base {
+    height: 100vh;
+    width: 100vw;
+}
+
+html, body {
+    margin: 0;
+    height: 100%;
+}
+
+.left_right {
+    display: flex;
+    flex-direction: row;
+}
+
+.top_down {
+    display: flex;
+    flex-direction: column;
+}
+
+.center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.center_rows {
+    display: flex;
+    align-items: center;
+}
+
+.space_between {
+    justify-content: space-between;
+}
+
+
+.card {
+    background-image: radial-gradient(circle at center, rgb(25, 25, 25), rgb(30, 30, 30));
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgb(10, 10, 10);
+}
+
+.login-button {
+    background: #045fcf;
+    border-color: #045fcf;
+    border-radius: 5px;
+    width: 30vw;
+    height: 45px;
+    color: white;
+    text-shadow: 0 0 5px black;
+    font-size: 12pt;
+}
+
+.form_text {
+    background: #141414;
+    border-color: #000000;
+    color: rgb(207, 207, 207);
+    border-radius: 5px;
+    border-width: 0;
+    width: calc(30vw - 10px);
+    height: 35px;
+    padding-left: 10px;
+    text-shadow: 0 0 5px rgb(20, 19, 19);
+    font-size: 12pt;
+}
+
+a {
+    color: lightgray;
+    font-size: 12pt;
+}

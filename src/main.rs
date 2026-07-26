@@ -21,7 +21,7 @@ struct CreateUser {
 }
 
 async fn create_user(Json(user): Json<CreateUser>) {
-    let conn = Connection::open("userdata.db")?;
+    let conn = Connection::open("userdata.db").unwrap();
     conn.execute(
         "CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,7 +33,7 @@ async fn create_user(Json(user): Json<CreateUser>) {
     );
     conn.execute(
         "INSERT INTO users (username, email, password) VALUES (?1, ?2, ?3)",
-        params![(&user).username, (&user).email, (&user).password],
+        (&user.username, &user.email, &user.password),
     );
 }
 
@@ -58,7 +58,7 @@ async fn main() {
     let app = Router::new()
         .route("/", get(root))
         .route("/static/general.css", get(general))
-        .route("/register", get(register));
+        .route("/register", get(register).post(create_user));
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
