@@ -1,0 +1,22 @@
+<!doctype html>
+<html>
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <title>Curtain</title>
+    <link rel="stylesheet" href="static/general.css" />
+    <script src="https://cdn.jsdelivr.net/npm/js-cookie/src/js.cookie.js"></script>
+    <script src="static/general.js "></script>
+    <script>
+        fetch("/logout", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: '{"jwt": "' + jwt + '"}',
+        }).then((_) =>
+            {window.location.replace("/");}
+        )
+    </script>
+  </head>
+  <body></body>
+</html>

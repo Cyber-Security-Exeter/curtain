@@ -5,15 +5,35 @@
     <title>Curtain</title>
     <link rel="stylesheet" href="static/general.css" />
     <script src="https://cdn.jsdelivr.net/npm/js-cookie/src/js.cookie.js"></script>
+    <script src="static/general.js "></script>
   </head>
   <body>
     <div class="center base">
       <div class="top-down card center-rows">
         <h1>curtain</h1>
-        <form class="center-rows top-down space-between" style="gap: 10px" id="register">
-          <input class="form-text" type="text" placeholder="username" name="username"/>
-          <input class="form-text" type="text" placeholder="email" name="email"/>
-          <input class="form-text" type="text" placeholder="password" name="password"/>
+        <form
+          class="center-rows top-down space-between"
+          style="gap: 10px"
+          id="register"
+        >
+          <input
+            class="form-text"
+            type="text"
+            placeholder="username"
+            name="username"
+          />
+          <input
+            class="form-text"
+            type="text"
+            placeholder="email"
+            name="email"
+          />
+          <input
+            class="form-text"
+            type="text"
+            placeholder="password"
+            name="password"
+          />
           <input class="login-button" type="submit" value="Register" />
         </form>
         <p>or</p>
@@ -21,60 +41,52 @@
       </div>
     </div>
     <script>
-        const form = document.getElementById('register');
-        let error = null;
-        function add_error_message(message) {
-            if (error == null) {
-                error = document.createElement("span");
-                form.appendChild(error);
+      const form = document.getElementById("register");
+      let error = null;
+      function add_error_message(message) {
+        if (error == null) {
+          error = document.createElement("span");
+          form.appendChild(error);
+        }
+        error.innerHTML = message;
+      }
+
+      function submit_data(json) {
+        fetch("/register", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: json,
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            let jsondata = JSON.parse(data);
+            if (jsondata["status"] != "ok") {
+              add_error_message(jsondata["status"]);
+            } else {
+              sessionStorage.setItem(
+                "super_secret_dont_touch",
+                jsondata["jwt"],
+              );
+              Cookies.set("super_secret_dont_touch", jsondata["jwt"], {
+                expires: 7,
+                path: "",
+              });
+              window.location.replace("/home");
             }
-            error.innerHTML = message;
-        }
+          })
+          .catch((error) => {
+            add_error_message(JSON.parse(error)["status"]);
+          });
+      }
 
-        function submit_data(json) {
-            fetch('/register', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: json
-            })
-            .then(response => response.json())
-            .then(data => {
-                let jsondata = JSON.parse(data);
-                if (jsondata["status"] != "ok") {
-                    add_error_message(jsondata["status"]);
-                } else {
-                    sessionStorage.setItem("super_secret_dont_touch", jsondata["jwt"]);
-                    Cookies.set("super_secret_dont_touch", jsondata["jwt"], {expires: 7, path: ""});
-                    window.location.replace('/home');
-                }
-            })
-            .catch((error) => {
-                add_error_message(JSON.parse(error)["status"]);
-            });
-        }
-        function form_data_to_object(data) {
-            const obj = {};
-            data.forEach((value, key) => {
-                if (obj.hasOwnProperty(key)) {
-                    if (!Array.isArray(obj[key])) {
-                        obj[key] = [obj[key]];
-                    }
-                    obj[key].push(value);
-                } else {
-                    obj[key] = value;
-                }
-            });
-            return obj;
-        }
-
-        form.addEventListener('submit', function(event) {
-            event.preventDefault();
-            const data = new FormData(form);
-            const form_object = form_data_to_object(data)
-            submit_data(JSON.stringify(form_object));
-        });
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        const data = new FormData(form);
+        const form_object = form_data_to_object(data);
+        submit_data(JSON.stringify(form_object));
+      });
     </script>
   </body>
 </html>
