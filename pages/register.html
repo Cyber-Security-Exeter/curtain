@@ -4,6 +4,7 @@
     <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
     <title>Curtain</title>
     <link rel="stylesheet" href="static/general.css" />
+    <script src="https://cdn.jsdelivr.net/npm/js-cookie/src/js.cookie.js"></script>
   </head>
   <body>
     <div class="center base">
@@ -44,7 +45,9 @@
                 if (jsondata["status"] != "ok") {
                     add_error_message(jsondata["status"]);
                 } else {
-                    
+                    sessionStorage.setItem("super_secret_dont_touch", jsondata["jwt"]);
+                    Cookies.set("super_secret_dont_touch", jsondata["jwt"], {expires: 7, path: ""});
+                    window.location.replace('/home');
                 }
             })
             .catch((error) => {

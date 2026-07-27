@@ -12,3 +12,4 @@ tokio = { version = "1.53.1", features = ["full"] }
 serde = { version = "1.0.229", features = ["derive"] }
 rusqlite = "0.39.0"
 uuid = { version = "1.24.0", features = ["v4"] }
+jsonwebtoken = { version = "11", features = ["aws_lc_rs"] }
