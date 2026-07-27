@@ -10,4 +10,5 @@ axum = "0.8.9"
 axum-extra = "0.12.6"
 tokio = { version = "1.53.1", features = ["full"] }
 serde = { version = "1.0.229", features = ["derive"] }
-rusqlite = "0.32.0"
+rusqlite = "0.39.0"
+uuid = { version = "1.24.0", features = ["v4"] }

@@ -16,12 +16,12 @@ html, body {
     height: 100%;
 }
 
-.left_right {
+.left-right {
     display: flex;
     flex-direction: row;
 }
 
-.top_down {
+.top-down {
     display: flex;
     flex-direction: column;
 }
@@ -32,12 +32,12 @@ html, body {
     justify-content: center;
 }
 
-.center_rows {
+.center-rows {
     display: flex;
     align-items: center;
 }
 
-.space_between {
+.space-between {
     justify-content: space-between;
 }
 
@@ -60,7 +60,7 @@ html, body {
     font-size: 12pt;
 }
 
-.form_text {
+.form-text {
     background: #141414;
     border-color: #000000;
     color: rgb(207, 207, 207);
@@ -76,4 +76,8 @@ html, body {
 a {
     color: lightgray;
     font-size: 12pt;
+}
+
+span {
+    color: rgb(255, 0, 0)
 }
