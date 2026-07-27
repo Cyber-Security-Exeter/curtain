@@ -1,5 +1,5 @@
 /target
 userdata.db
 .env
-cargo.lock
+Cargo.lock
 .vscode/
