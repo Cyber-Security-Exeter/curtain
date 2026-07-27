@@ -188,10 +188,12 @@ async fn logout(Json(jwt): Json<JWT>) -> Json<String> {
     conn.execute("UPDATE users SET session_id=\"0\" WHERE id=?1", [format!("{}", decoded_jwt.uuid)]).unwrap();
     Json("{\"status\": \"ok\"}".to_owned())
 }
+
 async fn root() -> Html<String> {
     let file = read_file("./pages/welcome.html");
     Html(file)
 }
+
 async fn home() -> Html<String> {
     let file = read_file("./pages/home.html");
     Html(file)
@@ -199,6 +201,11 @@ async fn home() -> Html<String> {
 
 async fn register() -> Html<String> {
     let file = read_file("./pages/register.html");
+    Html(file)
+}
+
+async fn about() -> Html<String> {
+    let file = read_file("./pages/about.html");
     Html(file)
 }
 
@@ -227,6 +234,7 @@ async fn main() {
         .route("/login", post(login))
         .route("/register", get(register).post(create_user))
         .route("/logout", get(logout_page).post(logout))
+        .route("/about", get(about))
         .route("/api/check_valid_jwt", post(check_valid_jwt));
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
     axum::serve(listener, app).await.unwrap();
