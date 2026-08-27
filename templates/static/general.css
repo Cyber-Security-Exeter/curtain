@@ -1,0 +1,119 @@
+body {
+    background-image: radial-gradient(circle at center, rgb(20, 20, 20), rgb(35, 35, 35));
+}
+
+h1 {
+    color: lightgray;
+}
+p {
+    color: lightgray;
+    margin: 0;
+    padding: 5px;
+}
+
+label {
+    color: lightgray;
+    margin: 0;
+    padding: 5px;
+}
+
+
+.base {
+    height: 100vh;
+    width: 100vw;
+}
+
+html, body {
+    margin: 0;
+    height: 100%;
+}
+
+.left-right {
+    display: flex;
+    flex-direction: row;
+}
+
+.top-down {
+    display: flex;
+    flex-direction: column;
+}
+
+.center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.center-rows {
+    display: flex;
+    align-items: center;
+}
+
+.space-between {
+    justify-content: space-between;
+}
+
+
+.card {
+    background-image: radial-gradient(circle at center, rgb(25, 25, 25), rgb(30, 30, 30));
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgb(10, 10, 10);
+}
+
+.login-button {
+    background: #045fcf;
+    border-color: #045fcf;
+    border-radius: 5px;
+    width: 30vw;
+    height: 45px;
+    color: white;
+    text-shadow: 0 0 5px black;
+    font-size: 12pt;
+}
+
+.form-text {
+    background: #141414;
+    border-color: #000000;
+    color: rgb(207, 207, 207);
+    border-radius: 5px;
+    border-width: 0;
+    width: calc(30vw - 10px);
+    height: 35px;
+    padding-left: 10px;
+    text-shadow: 0 0 5px rgb(20, 19, 19);
+    font-size: 12pt;
+}
+
+a {
+    color: lightgray;
+    font-size: 12pt;
+}
+
+span {
+    color: rgb(255, 0, 0)
+}
+
+.navbar {
+  position: sticky;
+  top: 0;
+  overflow: hidden;
+  background-color: #555;
+}
+
+.navbar a {
+  float: left;
+  text-align: center;
+  padding: 12px;
+  color: white;
+  text-decoration: none;
+  font-size: 17px;
+}
+
+.navbar a:hover {
+  background-color: #000;
+}
+
+.active {
+  background-color: #04AA6D;
+}
