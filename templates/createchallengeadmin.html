@@ -3,60 +3,62 @@
   <head>
     <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
     <title>Curtain</title>
-    <link rel="stylesheet" href="static/general.css" />
-    <script src="static/general.js "></script>
+    <link rel="stylesheet" href="/static/general.css" />
+    <script src="/static/general.js "></script>
   </head>
   <body>
     <div w3-include-html="/items/navbar.html"></div>
     <div class="center base">
       <div class="top-down card center-rows">
         <h1>Hello {{username}}</h1>
-        <p>Team: {{teamname}}</p>
         <form
           class="center-rows top-down space-between"
           style="gap: 10px"
-          id="teamform"
-          action="/api/create_team"
+          id="challengeform"
+          action="/create_challenge"
         >
           <input
             class="form-text"
             type="text"
-            placeholder="teamname"
-            name="teamname"
+            placeholder="challenge name"
+            name="name"
           />
-          <div>
-            <label for="createteam">create team instead</label>
-            <input
-              id="createteam"
-              type="checkbox"
-              name="createteam"
-              value="createteam"
-            />
-          </div>
-          <input class="login-button" type="submit" value="Join Team" />
+          <input
+            class="form-text"
+            type="text"
+            placeholder="100"
+            name="points"
+          />
+          <input
+            class="form-text"
+            type="text"
+            placeholder="description"
+            name="description"
+          />
+          <input
+            class="form-text"
+            type="text"
+            placeholder="challenge id"
+            name="challengeid"
+          />
+          <input
+            class="form-text"
+            type="text"
+            placeholder="flag{}"
+            name="flag"
+          />
+          <input
+            class="form-text"
+            type="text"
+            placeholder="file.txt,file2.txt"
+            name="linkedfiles"
+          />
+          <input class="login-button" type="submit" value="Create challenge" />
         </form>
       </div>
     </div>
     <script>
-      let teamform = document.getElementById("teamform");
-      fetch("/api/get_user_details", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: '{"jwt": "' + jwt + '"}',
-      })
-        .then((response) => response.json())
-        .then((data) => {
-          let jsondata = JSON.parse(data);
-          if (jsondata["status"] == "ok" && jsondata["teamid"] != "") {
-            teamform.remove();
-          } else {
-          }
-        })
-        .catch((error) => {});
-
-      const form = document.getElementById("teamform");
+      const form = document.getElementById("challengeform");
       let error = null;
       function add_error_message(message) {
         if (error == null) {
@@ -66,12 +68,7 @@
         error.innerHTML = message;
       }
       function submit_data(json) {
-        const createteam = document.getElementById('createteam').checked;
-        let dir = "/create_team";
-        if (!createteam) {
-          dir = "/join_team";
-        }
-        fetch(dir, {
+        fetch("/create_challenge", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -84,7 +81,7 @@
             if (jsondata["status"] != "ok") {
               add_error_message(jsondata["status"]);
             } else {
-              window.location.replace("/profile");
+              window.location.replace("/admin/create_challenge");
             }
           })
           .catch((error) => {

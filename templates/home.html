@@ -7,8 +7,75 @@
     <script src="static/general.js "></script>
   </head>
   <body>
-    <div w3-include-html="../items/navbar.html"></div>
+    <div w3-include-html="/items/navbar.html"></div>
     <div class="center base">
+      {% for challenge in challenges %}
+        <div class="challenge-card">
+          <h1 id="name-{{challenge.id}}">{{challenge.name}}</h1>
+          <p>{{challenge.points}}</p>
+          <div id="description-{{challenge.id}}" hidden>{{challenge.description}}</div>
+          <div id="linkedfiles-{{challenge.id}}" hidden>{{challenge.linkedfiles}}</div>
+          <button id="view-button-{{challenge.id}}">View</button>
+        </div>
+      {% endfor %}
     </div>
+    <div w3-include-html="/items/challengeview.html" class="fullscreen" id="challenge-view" hidden></div>
+    <script>
+      function submit_data(json) {
+        fetch("/submit_flag", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: json,
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            let jsondata = JSON.parse(data);
+            if (jsondata["status"] != "ok") {
+              add_error_message(jsondata["status"]);
+            } else {
+              window.location.replace("/home");
+            }
+          })
+          .catch((error) => {
+            add_error_message(JSON.parse(error)["status"]);
+          });
+      }
+
+
+      const challengebuttons = [
+          {% for challenge in challenges %}
+            document.getElementById("view-button-{{challenge.id}}"),
+          {% endfor %}];
+      challengebuttons.forEach(element => {
+        element.onclick = function (event) {
+          event.preventDefault();
+          let challengeid = element.id.split("-")[2];
+          const description = document.getElementById("description-" + challengeid);
+          const name = document.getElementById("name-" + challengeid);
+          const linkedfiles = document.getElementById("linkedfiles-" + challengeid);
+          let challengeview = document.getElementById("challenge-view");
+          let nameview = document.getElementById("challenge_name");
+          let descriptionview = document.getElementById("description");
+          let linkedfileview = document.getElementById("files");
+          linkedfileview.innerHTML = "";
+          nameview.innerText = name.innerText;
+          descriptionview.innerText = description.innerText;
+
+          let flagform = document.getElementById("submitflag");
+          flagform.addEventListener("submit", function (event) {
+            event.preventDefault();
+            const data = new FormData(flagform);
+            const form_object = form_data_to_object(data);
+            form_object["jwt"] = get_cookies()["super_secret_dont_touch"];
+            form_object["id"] = challengeid;
+            submit_data(JSON.stringify(form_object));
+          });
+          challengeview.hidden = false;
+        };
+        console.log(element);
+      });
+    </script>
   </body>
 </html>

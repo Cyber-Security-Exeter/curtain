@@ -1,0 +1,79 @@
+<!doctype html>
+<html>
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <title>Curtain</title>
+    <link rel="stylesheet" href="/static/general.css" />
+    <script src="/static/general.js "></script>
+  </head>
+  <body>
+    <div w3-include-html="/items/navbar.html"></div>
+    <div class="center base">
+      <div class="top-down card center-rows">
+        <h1>Hello {{username}}</h1>
+        <form
+          class="center-rows top-down space-between"
+          style="gap: 10px"
+          id="challengeform"
+          action="/create_challenge"
+        >
+          {% for challenge in challenges %}
+          <div class="challenge-card left-right">
+            <h1>{{challenge.name}}</h1>
+            <input
+              id="{{challenge.id}}"
+              type="checkbox"
+              name="{{challenge.id}}"
+              value="{{challenge.name}}"
+            />
+          </div>
+          {% endfor %}
+          <input class="login-button" type="submit" value="Submit changes" />
+        </form>
+      </div>
+    </div>
+    <script>
+      const form = document.getElementById("challengeform");
+      const challenges = [
+          {% for challenge in challenges %}
+            "{{challenge.id}}",
+          {% endfor %}];
+      function submit_data(json) {
+        challenges.forEach(element => {
+            const checked = document.getElementById(element).checked;
+            fetch("/set_challenge_hidden", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                "id" : element,
+                "hidden" : checked,
+            }),
+            })
+            .then((response) => response.json())
+            .then((data) => {
+                let jsondata = JSON.parse(data);
+                if (jsondata["status"] != "ok") {
+                add_error_message(jsondata["status"]);
+                } else {
+                window.location.replace("/admin/hide_challenge");
+                }
+            })
+            .catch((error) => {
+                ;//add_error_message(JSON.parse(error)["status"]);
+            });
+            
+        });
+      }
+
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        const data = new FormData(form);
+        const form_object = form_data_to_object(data);
+        form_object["jwt"] = get_cookies()["super_secret_dont_touch"];
+        submit_data(JSON.stringify(form_object));
+      });
+    </script>
+  </body>
+</html>

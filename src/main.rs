@@ -27,6 +27,7 @@ use tower_http::services::ServeDir;
 use serde_json::json;
 use tower::ServiceBuilder;
 
+
 #[derive(Deserialize, Debug)]
 struct CreateUser {
     username: String,
@@ -55,7 +56,7 @@ struct User {
     session_id: u128,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 struct AdvancedUser {
     status: String,
     uuid: String,
@@ -64,12 +65,41 @@ struct AdvancedUser {
     teamid: String
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct Challenge {
+    name: String,
+    points: String,
+    description: String,
+    challengeid: String,
+    flag: String,
+    linkedfiles: String
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct ChallengeButHidden {
+    id: String,
+    name: String,
+    points: i32,
+    description: String,
+    hidden: bool,
+    challengeid: String,
+    flag: String,
+    linkedfiles: String
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct SetChallengeButHidden {
+    id: String,
+    hidden: bool
+}
+
+
 #[derive(Debug, Serialize, Deserialize)]
 struct JWT {
     jwt: String,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 struct ID {
     id: String
 }
@@ -117,6 +147,30 @@ fn dbinit() {
         [],
     );
     let result = conn.execute(
+        "CREATE TABLE IF NOT EXISTS challenges (
+            id TEXT PRIMARY KEY,
+            challengename TEXT NOT NULL UNIQUE,
+            points INT NOT NULL,
+            description TEXT NOT NULL,
+            hidden BOOL NOT NULL,
+            challengeid TEXT NOT NULL,
+            flag TEXT NOT NULL,
+            linkedfiles TEXT NOT NULL
+        )",
+        [],
+    );
+    let result = conn.execute(
+        "CREATE TABLE IF NOT EXISTS challengecompletions (
+            id TEXT PRIMARY KEY,
+            teamname TEXT NOT NULL,
+            challenge TEXT,
+            time DATETIME,
+            FOREIGN KEY(teamname) REFERENCES teams(teamname),
+            FOREIGN KEY(challenge) REFERENCES challenges(challenge_name)
+        )",
+        [],
+    );
+    let result = conn.execute(
         "CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
             username TEXT NOT NULL UNIQUE,
@@ -151,6 +205,66 @@ async fn check_valid_jwt(Json(jwt): Json<JWT>) -> impl IntoResponse {
         }
     }
     Json(format!("{{\"status\": \"{}\"}}", status))
+}
+
+fn get_challenges_internal() -> Vec<ChallengeButHidden> {
+    let conn: Connection = Connection::open("userdata.db").unwrap();
+    dbinit();
+    let mut prestmt = conn.prepare("SELECT id, challengename, points, description, hidden, challengeid, flag, linkedfiles FROM challenges");
+    let mut stmt = prestmt.unwrap();
+    let mut rows = stmt.query_map([], |row| {
+        Ok(
+            ChallengeButHidden {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                points: row.get(2)?,
+                description: row.get(3)?,
+                hidden: row.get(4)?,
+                challengeid: row.get(5)?,
+                flag: row.get(6)?,
+                linkedfiles: row.get(7)?
+            }
+        )
+    });
+    match rows {
+        Ok(value) => {
+            let mut jsonlist = vec![];
+            for row in value {
+                println!("{:?}", row);
+                if row.is_ok() {
+                    jsonlist.push(row.unwrap());
+                }
+            }
+            println!("{:?}", jsonlist);
+            return jsonlist;
+        },
+        Err(e) => println!("Error: {}", e),
+    }
+    return vec![];
+}
+
+async fn set_challenge_hidden(Json(challenge): Json<SetChallengeButHidden>) -> impl IntoResponse {
+    let conn: Connection = Connection::open("userdata.db").unwrap();
+    dbinit();
+    conn.execute("UPDATE challenges SET hidden=?1 WHERE id=?2", (challenge.hidden.clone(), challenge.id.clone())).unwrap();
+    println!("{:?}", challenge);
+    Json("{\"status\": \"ok\"}")
+}
+
+async fn get_challenges() -> impl IntoResponse {
+    return Json(serde_json::to_string(&get_challenges_internal()).unwrap());
+}
+
+async fn create_challenge(Json(challenge): Json<Challenge>) -> impl IntoResponse {
+    let conn: Connection = Connection::open("userdata.db").unwrap();
+    dbinit();
+    let id = Uuid::new_v4();
+    let session_id = Uuid::new_v4();
+    let creation_result: Result<usize> = conn.execute(
+        "INSERT INTO challenges (id, challengename, points, description, hidden, challengeid, flag, linkedfiles) VALUES (?1, ?2, ?3, ?4, true, ?5, ?6, ?7)",
+        (format!("{}", id.as_u128()), &challenge.name, &challenge.points, &challenge.description, challenge.challengeid, challenge.flag, challenge.linkedfiles),
+    );
+    Json("{\"status\": \"ok\"}")
 }
 
 fn get_user_details_internal(jwt: JWT) -> Option<AdvancedUser> {
@@ -353,9 +467,22 @@ async fn root() -> impl IntoResponse {
     Html(file)
 }
 
-async fn home() -> impl IntoResponse {
-    let file = read_file("./templates/home.html");
-    Html(file)
+#[derive(askama::Template)]
+#[template(path = "home.html")]
+struct HomeTemplate<'a> {
+    challenges: Vec<&'a ChallengeButHidden>,
+}
+
+async fn home() -> Response {
+    let mut challenges = get_challenges_internal();
+    let mut challengecards = vec![];
+    for challenge in challenges.iter() {
+        if challenge.hidden == false {
+            challengecards.push(challenge);
+        }
+    }
+    let template = HomeTemplate { challenges: challengecards};
+    return HtmlTemplate(template).into_response();
 }
 
 async fn register() -> impl IntoResponse {
@@ -378,9 +505,49 @@ struct ProfileTemplate {
 async fn profile(cookie: CookieManager) -> Response {
     if cookie.get("super_secret_dont_touch").is_some() {
         let user = get_user_details_internal(JWT {jwt : cookie.get("super_secret_dont_touch").unwrap().value().to_owned()});
-        println!("test");
         if user.is_some() {
-            let template = ProfileTemplate { username: user.clone().unwrap().username, teamname: user.unwrap().teamname};
+            let template = ProfileTemplate { username: user.clone().unwrap().username, teamname: user.unwrap().teamname };
+            return HtmlTemplate(template).into_response();
+        }
+    }
+    Redirect::to("/").into_response()
+}
+
+#[derive(Template)]
+#[template(path = "createchallengeadmin.html")]
+struct CreateChallengeTemplate {
+    username: String,
+}
+
+async fn admin_create_challenge(cookie: CookieManager) -> Response {
+    if cookie.get("super_secret_dont_touch").is_some() {
+        let user = get_user_details_internal(JWT {jwt : cookie.get("super_secret_dont_touch").unwrap().value().to_owned()});
+        if user.is_some() {
+            let template = CreateChallengeTemplate { username: user.clone().unwrap().username };
+            return HtmlTemplate(template).into_response();
+        }
+    }
+    Redirect::to("/").into_response()
+}
+
+#[derive(Template)]
+#[template(path = "challengehideradmin.html")]
+struct ChallengeHiderTemplate<'a> {
+    username: String,
+    challenges: Vec<&'a ChallengeButHidden>
+}
+
+async fn admin_hide_challenge(cookie: CookieManager) -> Response {
+    let mut challenges = get_challenges_internal();
+    let mut challengecards = vec![];
+    for challenge in challenges.iter() {
+        challengecards.push(challenge);
+    }
+    if cookie.get("super_secret_dont_touch").is_some() {
+        let user = get_user_details_internal(JWT {jwt : cookie.get("super_secret_dont_touch").unwrap().value().to_owned()});
+        if user.is_some() {
+            println!("{:?}", challengecards);
+            let template = ChallengeHiderTemplate { username: user.clone().unwrap().username, challenges: challengecards };
             return HtmlTemplate(template).into_response();
         }
     }
@@ -411,7 +578,12 @@ async fn main() {
         .route("/home", get(home))
         .route("/profile", get(profile))
         .route("/login", post(login))
+        .route("/admin/create_challenge", get(admin_create_challenge))
+        .route("/admin/hide_challenge", get(admin_hide_challenge))
+        .route("/set_challenge_hidden", post(set_challenge_hidden))
         .route("/create_team", post(create_team))
+        .route("/create_challenge", post(create_challenge))
+        .route("/get_challenges", post(get_challenges))
         .route("/join_team", post(join_team))
         .route("/register", get(register).post(create_user))
         .route("/logout", get(logout_page).post(logout))
@@ -419,7 +591,7 @@ async fn main() {
         .nest_service("/download", ServeDir::new("./templates/downloads"))
         .route("/api/check_valid_jwt", post(check_valid_jwt))
         .route("/api/get_jwt_details", post(get_jwt_details))
-        .route("/api/get_user_details", post(get_user_details))
+        .route("/api/get_user_details", post(get_user_details)) 
         .layer(CookieLayer::default());
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
     axum::serve(listener, app).await.unwrap();
