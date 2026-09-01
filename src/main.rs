@@ -93,8 +93,15 @@ struct SetChallengeButHidden {
     hidden: bool
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct Flag {
+    challengename: String,
+    jwt: String,
+    flag: String
+}
 
-#[derive(Debug, Serialize, Deserialize)]
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 struct JWT {
     jwt: String,
 }
@@ -103,6 +110,13 @@ struct JWT {
 struct ID {
     id: String
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct Team {
+    name: String,
+    points: i32
+}
+
 
 struct HtmlTemplate<T>(T);
 
@@ -255,6 +269,7 @@ async fn get_challenges() -> impl IntoResponse {
     return Json(serde_json::to_string(&get_challenges_internal()).unwrap());
 }
 
+
 async fn create_challenge(Json(challenge): Json<Challenge>) -> impl IntoResponse {
     let conn: Connection = Connection::open("userdata.db").unwrap();
     dbinit();
@@ -332,6 +347,45 @@ fn get_user_details_internal(jwt: JWT) -> Option<AdvancedUser> {
     }
 
     None
+}
+
+fn check_challenge_completion(jwt: JWT, challengename: String) -> bool {
+    let conn: Connection = Connection::open("userdata.db").unwrap();
+    dbinit();
+    let user = get_user_details_internal(jwt).unwrap();
+    let mut stmt = conn.prepare("SELECT * FROM challengecompletions WHERE challenge=?1 AND teamname=?2").unwrap();
+    let rows = stmt.query([challengename, user.teamname]).unwrap();
+    let size = rows.count().unwrap();
+    if size > 0 as usize {
+        return true;
+    }
+    return false;
+}
+
+fn complete_challenge(jwt: JWT, challengename: String) {
+    let conn: Connection = Connection::open("userdata.db").unwrap();
+    dbinit();
+    let user = get_user_details_internal(jwt.clone()).unwrap();
+    let id = Uuid::new_v4();
+    if !check_challenge_completion(jwt, challengename.clone()) {
+        conn.execute("INSERT INTO challengecompletions (id, teamname, challenge, time) VALUES (?1, ?2, ?3, date('now'))", [id.as_u128().to_string(), user.teamname, challengename]).unwrap();
+    }
+}
+
+async fn check_flag(Json(flag): Json<Flag>) -> impl IntoResponse {
+    let conn: Connection = Connection::open("userdata.db").unwrap();
+    dbinit();
+    let mut stmt = conn.prepare("SELECT * FROM challenges WHERE challengename=?1 AND flag=?2").unwrap();
+    println!("{:?}", flag);
+    let rows = stmt.query([flag.challengename.clone(), flag.flag]).unwrap();
+    let size = rows.count().unwrap();
+    println!("{:?}", size);
+    if size > 0 as usize {
+        complete_challenge(JWT { jwt: flag.jwt }, flag.challengename);
+        return Json("{\"status\": \"ok\", \"correct\": true}".to_owned());
+    }
+    return Json("{\"status\": \"ok\", \"correct\": false}".to_owned());
+
 }
 
 async fn get_user_details(Json(jwt): Json<JWT>) -> impl IntoResponse {
@@ -421,6 +475,36 @@ async fn join_team(Json(createteam): Json<CreateTeam>) -> impl IntoResponse {
 }
 
 
+fn get_teams() -> Vec<Team> {
+    let conn: Connection = Connection::open("userdata.db").unwrap();
+    dbinit();
+    let query = "
+    SELECT teams.teamname, SUM(challenges.points)
+    FROM teams
+    INNER JOIN challengecompletions
+    ON teams.teamname = challengecompletions.teamname 
+    INNER JOIN challenges
+    ON challenges.challengename = challengecompletions.challenge
+    GROUP BY teams.teamname
+    ORDER BY SUM(challenges.points) DESC;
+    ";
+    let mut stmt = conn.prepare(query).unwrap();
+    let mut rows = stmt.query_map([], |row| {
+        Ok(
+            Team {
+                name: row.get(0)?,
+                points: row.get(1)?,
+            }
+        )
+    }).unwrap();
+    let mut returnvec = vec![];
+    for row in rows {
+        returnvec.push(row.unwrap());
+    }
+    returnvec
+}
+
+
 async fn login(Json(createuser): Json<Login>) -> impl IntoResponse {
     let conn: Connection = Connection::open("userdata.db").unwrap();
     dbinit();
@@ -482,6 +566,22 @@ async fn home() -> Response {
         }
     }
     let template = HomeTemplate { challenges: challengecards};
+    return HtmlTemplate(template).into_response();
+}
+
+#[derive(askama::Template)]
+#[template(path = "scores.html")]
+struct ScoreTemplate<'a> {
+    teams: Vec<&'a Team>
+}
+
+async fn scores() -> Response {
+    let teams = get_teams();
+    let mut refteams = vec![];
+    for team in teams.iter() {
+        refteams.push(team);
+    }
+    let template = ScoreTemplate { teams: refteams };
     return HtmlTemplate(template).into_response();
 }
 
@@ -588,6 +688,8 @@ async fn main() {
         .route("/register", get(register).post(create_user))
         .route("/logout", get(logout_page).post(logout))
         .route("/about", get(about))
+        .route("/scores", get(scores))
+        .route("/submit_flag", post(check_flag))
         .nest_service("/download", ServeDir::new("./templates/downloads"))
         .route("/api/check_valid_jwt", post(check_valid_jwt))
         .route("/api/get_jwt_details", post(get_jwt_details))

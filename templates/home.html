@@ -10,16 +10,37 @@
     <div w3-include-html="/items/navbar.html"></div>
     <div class="center base">
       {% for challenge in challenges %}
-        <div class="challenge-card">
-          <h1 id="name-{{challenge.id}}">{{challenge.name}}</h1>
-          <p>{{challenge.points}}</p>
-          <div id="description-{{challenge.id}}" hidden>{{challenge.description}}</div>
-          <div id="linkedfiles-{{challenge.id}}" hidden>{{challenge.linkedfiles}}</div>
-          <button id="view-button-{{challenge.id}}">View</button>
-        </div>
+      <div class="challenge-card">
+        <h1 id="name-{{challenge.id}}">{{challenge.name}}</h1>
+        <p>{{challenge.points}}</p>
+        <div id="description-{{challenge.id}}" hidden>{{challenge.description}}</div>
+        <div id="linkedfiles-{{challenge.id}}" hidden>{{challenge.linkedfiles}}</div>
+        <button id="view-button-{{challenge.id}}">View</button>
+      </div>
       {% endfor %}
     </div>
-    <div w3-include-html="/items/challengeview.html" class="fullscreen" id="challenge-view" hidden></div>
+    <div class="fullscreen" id="challenge-view" hidden>
+      <div class="top-down card center-rows takefull">
+        <h1 id="challenge_name"></h1>
+        <p id="description"></p>
+        <div id="files" class="top-down"></div>
+        <form
+          class="center-rows top-down space-between"
+          style="gap: 10px"
+          id="submitflag"
+        >
+          <input
+            class="form-text"
+            type="text"
+            placeholder="flag{}"
+            name="flag"
+          />
+          <span id="result" hidden></span>
+          <input class="login-button" type="submit" value="Check flag" />
+        </form>
+        <a href="/home"><button>back</button></a>
+      </div>
+    </div>
     <script>
       function submit_data(json) {
         fetch("/submit_flag", {
@@ -35,7 +56,12 @@
             if (jsondata["status"] != "ok") {
               add_error_message(jsondata["status"]);
             } else {
-              window.location.replace("/home");
+                document.getElementById("result").hidden = false;
+                if (jsondata["correct"]) {
+                  document.getElementById("result").innerText = "correct";
+                } else {
+                  document.getElementById("result").innerText = "incorrect";
+                }
             }
           })
           .catch((error) => {
@@ -63,6 +89,17 @@
           nameview.innerText = name.innerText;
           descriptionview.innerText = description.innerText;
 
+          linkedfiles.innerText.split(",").forEach(file => {
+            file = file.replace(" ", "");
+            console.log(file);
+            console.log(linkedfiles.innerText);
+            let link = document.createElement("a");
+            link.href = "/download/" + file;
+            link.download = file;
+            link.innerText = file;
+            linkedfileview.appendChild(link);
+          });
+
           let flagform = document.getElementById("submitflag");
           flagform.addEventListener("submit", function (event) {
             event.preventDefault();
@@ -70,8 +107,10 @@
             const form_object = form_data_to_object(data);
             form_object["jwt"] = get_cookies()["super_secret_dont_touch"];
             form_object["id"] = challengeid;
+            form_object["challengename"] = document.getElementById("challenge_name").innerText;
             submit_data(JSON.stringify(form_object));
           });
+          document.getElementById("result").hidden = true;
           challengeview.hidden = false;
         };
         console.log(element);

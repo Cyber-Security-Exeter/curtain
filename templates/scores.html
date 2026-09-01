@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <title>Curtain</title>
+    <link rel="stylesheet" href="static/general.css" />
+    <script src="static/general.js "></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0"></script>
+  </head>
+  <body>
+    <div w3-include-html="/items/navbar.html"></div>
+    <canvas id="scorechart" style="width: 100vw; height: 60vh;"></canvas>
+    <script>
+        const teams = [
+          {% for team in teams %}
+            "{{team.name}}",
+          {% endfor %}
+        ];
+        const scores = [
+          {% for team in teams %}
+            "{{team.points}}",
+          {% endfor %}
+        ];
+        const barColors = [];
+        const scorechart = new Chart("scorechart", {
+            type: "bar",
+            data: {
+                labels: teams,
+                datasets: [{ 
+                    label: "points",
+                    data: scores
+                }]
+            },
+            options: {}
+        });
+    </script>
+  </body>
+</html>
