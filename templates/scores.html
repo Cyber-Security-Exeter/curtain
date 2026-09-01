@@ -9,7 +9,17 @@
   </head>
   <body>
     <div w3-include-html="/items/navbar.html"></div>
-    <canvas id="scorechart" style="width: 100vw; height: 60vh;"></canvas>
+    <div class="bar-chart-holder">
+      <div class="top-down card">
+        <canvas id="scorechart" style="width: 100vw; height: 60vh;"></canvas>
+        <h1>Leaderboard</h1>
+        {% for team in teams %}
+          <div class="center-left-right">
+            <h3>{{loop.index}}. Team {{team.name}}: {{team.points}}</h3>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
     <script>
         const teams = [
           {% for team in teams %}

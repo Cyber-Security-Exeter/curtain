@@ -67,34 +67,18 @@
         }
         error.innerHTML = message;
       }
-      function submit_data(json) {
-        fetch("/create_challenge", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: json,
-        })
-          .then((response) => response.json())
-          .then((data) => {
-            let jsondata = JSON.parse(data);
-            if (jsondata["status"] != "ok") {
-              add_error_message(jsondata["status"]);
-            } else {
-              window.location.replace("/admin/create_challenge");
-            }
-          })
-          .catch((error) => {
-            add_error_message(JSON.parse(error)["status"]);
-          });
-      }
 
-      form.addEventListener("submit", function (event) {
+      form.addEventListener("submit", async function (event) {
         event.preventDefault();
         const data = new FormData(form);
         const form_object = form_data_to_object(data);
         form_object["jwt"] = get_cookies()["super_secret_dont_touch"];
-        submit_data(JSON.stringify(form_object));
+        let jsondata = await submit_data(JSON.stringify(form_object), "/api/create_challenge");
+        if (jsondata["status"] != "ok") {
+          add_error_message(jsondata["status"]);
+        } else {
+          window.location.replace("/admin/create_challenge");
+        }
       });
     </script>
   </body>

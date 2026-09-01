@@ -66,11 +66,6 @@
         error.innerHTML = message;
       }
       function submit_data(json) {
-        const createteam = document.getElementById('createteam').checked;
-        let dir = "/create_team";
-        if (!createteam) {
-          dir = "/join_team";
-        }
         fetch(dir, {
           method: "POST",
           headers: {
@@ -81,23 +76,28 @@
           .then((response) => response.json())
           .then((data) => {
             let jsondata = JSON.parse(data);
-            if (jsondata["status"] != "ok") {
-              add_error_message(jsondata["status"]);
-            } else {
-              window.location.replace("/profile");
-            }
           })
           .catch((error) => {
             add_error_message(JSON.parse(error)["status"]);
           });
       }
 
-      form.addEventListener("submit", function (event) {
+      form.addEventListener("submit", async function (event) {
         event.preventDefault();
         const data = new FormData(form);
         const form_object = form_data_to_object(data);
         form_object["jwt"] = get_cookies()["super_secret_dont_touch"];
-        submit_data(JSON.stringify(form_object));
+        const createteam = document.getElementById('createteam').checked;
+        let dir = "/create_team";
+        if (!createteam) {
+          dir = "/join_team";
+        }
+        let jsondata = await submit_data(JSON.stringify(form_object), dir);
+        if (jsondata["status"] != "ok") {
+          add_error_message(jsondata["status"]);
+        } else {
+          window.location.replace("/profile");
+        }
       });
     </script>
   </body>

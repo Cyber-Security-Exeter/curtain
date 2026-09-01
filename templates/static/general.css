@@ -16,6 +16,15 @@ body {
 h1 {
     color: lightgray;
 }
+
+
+h2 {
+    color: lightgray;
+}
+
+h3 {
+    color: lightgray;
+}
 p {
     color: lightgray;
     margin: 0;
@@ -53,6 +62,12 @@ html, body {
     flex-direction: column;
 }
 
+.center-left-right {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+
 .center {
     display: flex;
     align-items: center;
@@ -76,9 +91,32 @@ html, body {
     box-shadow: 0 0 10px rgb(10, 10, 10);
 }
 
+.challenges {
+    padding: 20px;
+    gap: 20px;
+}
+
+.challenge-card {
+    background-image: radial-gradient(circle at center, rgb(25, 25, 25), rgb(30, 30, 30));
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgb(10, 10, 10);
+}
+
 .login-button {
     background: #045fcf;
     border-color: #045fcf;
+    border-radius: 5px;
+    width: 30vw;
+    height: 45px;
+    color: white;
+    text-shadow: 0 0 5px black;
+    font-size: 12pt;
+}
+
+.secondary-button {
+    background: #000000;
+    border-color: #181818;
     border-radius: 5px;
     width: 30vw;
     height: 45px;
@@ -131,4 +169,12 @@ span {
 
 .active {
   background-color: #04AA6D;
+}
+
+.bar-chart-holder {
+    padding: 20px;
+}
+
+.lilgap {
+    gap: 5px;
 }

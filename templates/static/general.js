@@ -24,6 +24,24 @@ function form_data_to_object(data) {
   return obj;
 }
 
+async function submit_data(json, dir) {
+  return await fetch(dir, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: json,
+  })
+    .then((response) => response.json())
+    .then((data) => {
+      let jsondata = JSON.parse(data);
+      return jsondata;
+    })
+    .catch((error) => {
+      //add_error_message(JSON.parse(error)["status"]);
+    });
+}
+
 async function check_valid_jwt(jwt) {
   let isvalid = false;
   await fetch("/api/check_valid_jwt", {
@@ -84,39 +102,38 @@ check_valid_jwt(jwt).then((isvalid) => {
 });
 
 function includeHTML() {
-
-    // https://www.w3schools.com/howto/howto_html_include.asp
-    var z, i, elmnt, file, xhttp;
-    /* Loop through a collection of all HTML elements: */
-    z = document.getElementsByTagName("*");
-    console.log(z);
-    for (i = 0; i < z.length; i++) {
-        elmnt = z[i];
-        /*search for elements with a certain atrribute:*/
-        file = elmnt.getAttribute("w3-include-html");
-        if (file) {
-            /* Make an HTTP request using the attribute value as the file name: */
-            xhttp = new XMLHttpRequest();
-            xhttp.onreadystatechange = function () {
-            if (this.readyState == 4) {
-                if (this.status == 200) {
-                elmnt.innerHTML = this.responseText;
-                }
-                if (this.status == 404) {
-                elmnt.innerHTML = "Page not found.";
-                }
-                /* Remove the attribute, and call this function once more: */
-                elmnt.removeAttribute("w3-include-html");
-                includeHTML();
-            }
-            };
-            xhttp.open("GET", file, true);
-            xhttp.send();
-            return;
+  // https://www.w3schools.com/howto/howto_html_include.asp
+  var z, i, elmnt, file, xhttp;
+  /* Loop through a collection of all HTML elements: */
+  z = document.getElementsByTagName("*");
+  console.log(z);
+  for (i = 0; i < z.length; i++) {
+    elmnt = z[i];
+    /*search for elements with a certain atrribute:*/
+    file = elmnt.getAttribute("w3-include-html");
+    if (file) {
+      /* Make an HTTP request using the attribute value as the file name: */
+      xhttp = new XMLHttpRequest();
+      xhttp.onreadystatechange = function () {
+        if (this.readyState == 4) {
+          if (this.status == 200) {
+            elmnt.innerHTML = this.responseText;
+          }
+          if (this.status == 404) {
+            elmnt.innerHTML = "Page not found.";
+          }
+          /* Remove the attribute, and call this function once more: */
+          elmnt.removeAttribute("w3-include-html");
+          includeHTML();
         }
+      };
+      xhttp.open("GET", file, true);
+      xhttp.send();
+      return;
     }
+  }
 }
 
 window.onload = function () {
-    includeHTML()
+  includeHTML();
 };
