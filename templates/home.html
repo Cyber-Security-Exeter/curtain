@@ -8,11 +8,11 @@
   </head>
   <body>
     <div w3-include-html="/items/navbar.html"></div>
-    <div class="center base">
+    <div class="left-right challenges">
       {% for challenge in challenges %}
       <div class="challenge-card">
         <h1 id="name-{{challenge.id}}">{{challenge.name}}</h1>
-        <p>{{challenge.points}}</p>
+        <p>Points: {{challenge.points}}</p>
         <div id="description-{{challenge.id}}" hidden>{{challenge.description}}</div>
         <div id="linkedfiles-{{challenge.id}}" hidden>{{challenge.linkedfiles}}</div>
         <button id="view-button-{{challenge.id}}">View</button>
@@ -20,7 +20,7 @@
       {% endfor %}
     </div>
     <div class="fullscreen" id="challenge-view" hidden>
-      <div class="top-down card center-rows takefull">
+      <div class="top-down card center-rows takefull lilgap">
         <h1 id="challenge_name"></h1>
         <p id="description"></p>
         <div id="files" class="top-down"></div>
@@ -38,38 +38,10 @@
           <span id="result" hidden></span>
           <input class="login-button" type="submit" value="Check flag" />
         </form>
-        <a href="/home"><button>back</button></a>
+        <a href="/home"><button class="secondary-button">back</button></a>
       </div>
     </div>
     <script>
-      function submit_data(json) {
-        fetch("/submit_flag", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: json,
-        })
-          .then((response) => response.json())
-          .then((data) => {
-            let jsondata = JSON.parse(data);
-            if (jsondata["status"] != "ok") {
-              add_error_message(jsondata["status"]);
-            } else {
-                document.getElementById("result").hidden = false;
-                if (jsondata["correct"]) {
-                  document.getElementById("result").innerText = "correct";
-                } else {
-                  document.getElementById("result").innerText = "incorrect";
-                }
-            }
-          })
-          .catch((error) => {
-            add_error_message(JSON.parse(error)["status"]);
-          });
-      }
-
-
       const challengebuttons = [
           {% for challenge in challenges %}
             document.getElementById("view-button-{{challenge.id}}"),
@@ -101,14 +73,24 @@
           });
 
           let flagform = document.getElementById("submitflag");
-          flagform.addEventListener("submit", function (event) {
+          flagform.addEventListener("submit", async function (event) {
             event.preventDefault();
             const data = new FormData(flagform);
             const form_object = form_data_to_object(data);
             form_object["jwt"] = get_cookies()["super_secret_dont_touch"];
             form_object["id"] = challengeid;
             form_object["challengename"] = document.getElementById("challenge_name").innerText;
-            submit_data(JSON.stringify(form_object));
+            let jsondata = await submit_data(JSON.stringify(form_object), "/submit_flag");
+            if (jsondata["status"] != "ok") {
+              add_error_message(jsondata["status"]);
+            } else {
+                document.getElementById("result").hidden = false;
+                if (jsondata["correct"]) {
+                  document.getElementById("result").innerText = "correct";
+                } else {
+                  document.getElementById("result").innerText = "incorrect";
+                }
+            }
           });
           document.getElementById("result").hidden = true;
           challengeview.hidden = false;

@@ -26,6 +26,17 @@ use std::path::PathBuf;
 use tower_http::services::ServeDir;
 use serde_json::json;
 use tower::ServiceBuilder;
+pub mod authentication;
+use authentication::{
+    User,
+    JWT,
+    get_user_details_internal,
+    check_valid_jwt_internal,
+    decode_jwt,
+    create_jwt,
+    AdvancedUser,
+    is_admin
+};
 
 
 #[derive(Deserialize, Debug)]
@@ -45,24 +56,6 @@ struct CreateTeam {
 struct Login {
     username: String,
     password: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct User {
-    uuid: u128,
-    username: String,
-    permissions: i8,
-    exp: u64,
-    session_id: u128,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-struct AdvancedUser {
-    status: String,
-    uuid: String,
-    username: String,
-    teamname: String,
-    teamid: String
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -101,11 +94,6 @@ struct Flag {
 }
 
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct JWT {
-    jwt: String,
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct ID {
     id: String
@@ -136,22 +124,7 @@ where
     }
 }
 
-
-fn create_jwt(user: &mut User) -> String {
-    let secret = read_file(".env");
-    let encoding_key = EncodingKey::from_secret(secret.as_bytes());
-    let timestamp: u64 = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-    user.exp = timestamp + 60 * 60 * 24 * 7;
-    encode(&Header::default(), &user, &encoding_key).unwrap()
-}
-
-fn decode_jwt(token: &str) -> User {
-    let secret = read_file(".env");
-    let decoding_key = DecodingKey::from_secret(secret.as_bytes());
-    decode::<User>(token, &decoding_key, &Validation::default()).unwrap().claims
-}
-
-fn dbinit() {
+pub fn dbinit() {
     let conn: Connection = Connection::open("userdata.db").unwrap();
     let result = conn.execute(
         "CREATE TABLE IF NOT EXISTS teams (
@@ -201,24 +174,11 @@ fn dbinit() {
 }
 
 async fn check_valid_jwt(Json(jwt): Json<JWT>) -> impl IntoResponse {
-    let conn: Connection = Connection::open("userdata.db").unwrap();
-    dbinit();
-    let decoded_jwt = decode_jwt(&(jwt.jwt));
-    let mut status = "ok";
-    if decoded_jwt.exp <= SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() {
-        status = "bad";
+    if (check_valid_jwt_internal(jwt.jwt)) {
+        Json("{\"status\": \"ok\"}")
     } else {
-        let mut prestmt = conn.prepare("SELECT id, session_id FROM users WHERE id=?1 AND session_id=?2");
-        let mut stmt = prestmt.unwrap();
-        let mut rows = stmt.query([format!("{}", decoded_jwt.uuid), format!("{}", decoded_jwt.session_id)]).unwrap();
-        let mut rowvec = rows.next();
-        if !rowvec.is_ok() {
-            status = "bad";
-        } else if rowvec.unwrap().is_none() {
-            status = "bad";
-        }
+        Json("{\"status\": \"bad\"}")
     }
-    Json(format!("{{\"status\": \"{}\"}}", status))
 }
 
 fn get_challenges_internal() -> Vec<ChallengeButHidden> {
@@ -244,15 +204,13 @@ fn get_challenges_internal() -> Vec<ChallengeButHidden> {
         Ok(value) => {
             let mut jsonlist = vec![];
             for row in value {
-                println!("{:?}", row);
                 if row.is_ok() {
                     jsonlist.push(row.unwrap());
                 }
             }
-            println!("{:?}", jsonlist);
             return jsonlist;
         },
-        Err(e) => println!("Error: {}", e),
+        Err(e) => {;},
     }
     return vec![];
 }
@@ -261,7 +219,6 @@ async fn set_challenge_hidden(Json(challenge): Json<SetChallengeButHidden>) -> i
     let conn: Connection = Connection::open("userdata.db").unwrap();
     dbinit();
     conn.execute("UPDATE challenges SET hidden=?1 WHERE id=?2", (challenge.hidden.clone(), challenge.id.clone())).unwrap();
-    println!("{:?}", challenge);
     Json("{\"status\": \"ok\"}")
 }
 
@@ -282,77 +239,10 @@ async fn create_challenge(Json(challenge): Json<Challenge>) -> impl IntoResponse
     Json("{\"status\": \"ok\"}")
 }
 
-fn get_user_details_internal(jwt: JWT) -> Option<AdvancedUser> {
-    let conn: Connection = Connection::open("userdata.db").unwrap();
-    dbinit();
-    let decoded_jwt = decode_jwt(&(jwt.jwt));
-    let mut status = "ok";
-    if decoded_jwt.exp <= SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() {
-        status = "bad";
-    } else {
-        let mut prestmt = conn.prepare("SELECT id, session_id FROM users WHERE id=?1 AND session_id=?2");
-        let mut stmt = prestmt.unwrap();
-        let mut rows = stmt.query([format!("{}", decoded_jwt.uuid), format!("{}", decoded_jwt.session_id)]).unwrap();
-        let mut rowvec = rows.next();
-        if !rowvec.is_ok() {
-            status = "bad";
-        } else if rowvec.unwrap().is_none() {
-            status = "bad";
-        }
-    }
-    if status == "ok" {
-        let mut prestmt = conn.prepare("SELECT users.id, users.username, teams.teamname, users.team_id FROM users INNER JOIN teams ON users.team_id = teams.id WHERE users.id=?1");
-        let mut stmt = prestmt.unwrap();
-        let mut rows = stmt.query_map([format!("{}", decoded_jwt.uuid)], |row| {
-            Ok(
-                AdvancedUser {
-                    status: "ok".to_owned(),
-                    uuid: row.get(0)?,
-                    username: row.get(1)?,
-                    teamname: row.get(2)?,
-                    teamid: row.get(3)?,
-                }
-            )
-        });
-        match rows {
-            Ok(value) => {
-                for newuser in value {
-                    return Some(newuser.unwrap());
-                }
-            },
-            Err(e) => println!("Error: {}", e),
-        }
-        println!("bad");
-        let mut newprestmt = conn.prepare("SELECT users.id, users.username FROM users WHERE users.id=?1");
-        let mut newstmt = newprestmt.unwrap();
-        let mut newrows = newstmt.query_map([format!("{}", decoded_jwt.uuid)], |newrow| {
-            Ok(
-                AdvancedUser {
-                    status: "ok".to_owned(),
-                    uuid: newrow.get(0)?,
-                    username: newrow.get(1)?,
-                    teamname: "".to_owned(),
-                    teamid: "".to_owned(),
-                }
-            )
-        });
-        match newrows {
-            Ok(value) => {
-                for newuser in value {
-                    return Some(newuser.unwrap());
-                }
-            },
-            Err(e) => println!("Error: {}", e),
-        }
-    }
-
-    None
-}
-
 fn check_challenge_completion(jwt: JWT, challengename: String) -> bool {
     let conn: Connection = Connection::open("userdata.db").unwrap();
     dbinit();
-    let user = get_user_details_internal(jwt).unwrap();
+    let user = get_user_details_internal(jwt.jwt).unwrap();
     let mut stmt = conn.prepare("SELECT * FROM challengecompletions WHERE challenge=?1 AND teamname=?2").unwrap();
     let rows = stmt.query([challengename, user.teamname]).unwrap();
     let size = rows.count().unwrap();
@@ -365,7 +255,7 @@ fn check_challenge_completion(jwt: JWT, challengename: String) -> bool {
 fn complete_challenge(jwt: JWT, challengename: String) {
     let conn: Connection = Connection::open("userdata.db").unwrap();
     dbinit();
-    let user = get_user_details_internal(jwt.clone()).unwrap();
+    let user = get_user_details_internal(jwt.jwt.clone()).unwrap();
     let id = Uuid::new_v4();
     if !check_challenge_completion(jwt, challengename.clone()) {
         conn.execute("INSERT INTO challengecompletions (id, teamname, challenge, time) VALUES (?1, ?2, ?3, date('now'))", [id.as_u128().to_string(), user.teamname, challengename]).unwrap();
@@ -376,10 +266,8 @@ async fn check_flag(Json(flag): Json<Flag>) -> impl IntoResponse {
     let conn: Connection = Connection::open("userdata.db").unwrap();
     dbinit();
     let mut stmt = conn.prepare("SELECT * FROM challenges WHERE challengename=?1 AND flag=?2").unwrap();
-    println!("{:?}", flag);
     let rows = stmt.query([flag.challengename.clone(), flag.flag]).unwrap();
     let size = rows.count().unwrap();
-    println!("{:?}", size);
     if size > 0 as usize {
         complete_challenge(JWT { jwt: flag.jwt }, flag.challengename);
         return Json("{\"status\": \"ok\", \"correct\": true}".to_owned());
@@ -389,7 +277,7 @@ async fn check_flag(Json(flag): Json<Flag>) -> impl IntoResponse {
 }
 
 async fn get_user_details(Json(jwt): Json<JWT>) -> impl IntoResponse {
-    let user = get_user_details_internal(jwt);
+    let user = get_user_details_internal(jwt.jwt);
     if user.is_none() {
         return Json("{\"status\": \"bad\"}".to_owned());
     }
@@ -421,7 +309,6 @@ async fn create_user(Json(createuser): Json<CreateUser>) -> impl IntoResponse {
         exp: 0,
         session_id: session_id.as_u128(),
     };
-    println!("{}", session_id.as_u128());
     Json(format!("{{\"status\": \"ok\", \"jwt\":\"{}\"}}", create_jwt(&mut user)).to_owned())
 }
 
@@ -511,7 +398,6 @@ async fn login(Json(createuser): Json<Login>) -> impl IntoResponse {
     let mut stmt = conn.prepare("SELECT id, permissions FROM users WHERE username=?1 AND password=?2").unwrap();
     let session_id = Uuid::new_v4();
     let mut rows: Vec<User> = stmt.query_map([createuser.username.clone(), createuser.password], |row| {
-        println!("{:?}", row);
         Ok(User {
             uuid: row.get::<usize, String>(0).unwrap().parse().unwrap(),
             username: createuser.username.to_owned(),
@@ -595,6 +481,11 @@ async fn about() -> impl IntoResponse {
     Html(file)
 }
 
+async fn forbidden() -> impl IntoResponse {
+    let file = read_file("./templates/forbidden.html");
+    Html(file)
+}
+
 #[derive(Template)]
 #[template(path = "profile.html")]
 struct ProfileTemplate {
@@ -604,7 +495,7 @@ struct ProfileTemplate {
 
 async fn profile(cookie: CookieManager) -> Response {
     if cookie.get("super_secret_dont_touch").is_some() {
-        let user = get_user_details_internal(JWT {jwt : cookie.get("super_secret_dont_touch").unwrap().value().to_owned()});
+        let user = get_user_details_internal(cookie.get("super_secret_dont_touch").unwrap().value().to_owned());
         if user.is_some() {
             let template = ProfileTemplate { username: user.clone().unwrap().username, teamname: user.unwrap().teamname };
             return HtmlTemplate(template).into_response();
@@ -621,10 +512,13 @@ struct CreateChallengeTemplate {
 
 async fn admin_create_challenge(cookie: CookieManager) -> Response {
     if cookie.get("super_secret_dont_touch").is_some() {
-        let user = get_user_details_internal(JWT {jwt : cookie.get("super_secret_dont_touch").unwrap().value().to_owned()});
+        let user = get_user_details_internal(cookie.get("super_secret_dont_touch").unwrap().value().to_owned());
         if user.is_some() {
-            let template = CreateChallengeTemplate { username: user.clone().unwrap().username };
-            return HtmlTemplate(template).into_response();
+            if (is_admin(cookie.get("super_secret_dont_touch").unwrap().value().to_owned())) {
+                let template = CreateChallengeTemplate { username: user.clone().unwrap().username };
+                return HtmlTemplate(template).into_response();
+            }
+            return Redirect::to("/forbidden").into_response();
         }
     }
     Redirect::to("/").into_response()
@@ -644,11 +538,13 @@ async fn admin_hide_challenge(cookie: CookieManager) -> Response {
         challengecards.push(challenge);
     }
     if cookie.get("super_secret_dont_touch").is_some() {
-        let user = get_user_details_internal(JWT {jwt : cookie.get("super_secret_dont_touch").unwrap().value().to_owned()});
+        let user = get_user_details_internal(cookie.get("super_secret_dont_touch").unwrap().value().to_owned());
         if user.is_some() {
-            println!("{:?}", challengecards);
-            let template = ChallengeHiderTemplate { username: user.clone().unwrap().username, challenges: challengecards };
-            return HtmlTemplate(template).into_response();
+            if (is_admin(cookie.get("super_secret_dont_touch").unwrap().value().to_owned())) {
+                let template = ChallengeHiderTemplate { username: user.clone().unwrap().username, challenges: challengecards };
+                return HtmlTemplate(template).into_response();
+            }
+            return Redirect::to("/forbidden").into_response();
         }
     }
     Redirect::to("/").into_response()
@@ -680,9 +576,9 @@ async fn main() {
         .route("/login", post(login))
         .route("/admin/create_challenge", get(admin_create_challenge))
         .route("/admin/hide_challenge", get(admin_hide_challenge))
-        .route("/set_challenge_hidden", post(set_challenge_hidden))
+        .route("/admin", get(|| async { Redirect::to("/admin/create_challenge") }))
+        .route("/admin/", get(|| async { Redirect::to("/admin/create_challenge") }))
         .route("/create_team", post(create_team))
-        .route("/create_challenge", post(create_challenge))
         .route("/get_challenges", post(get_challenges))
         .route("/join_team", post(join_team))
         .route("/register", get(register).post(create_user))
@@ -690,7 +586,10 @@ async fn main() {
         .route("/about", get(about))
         .route("/scores", get(scores))
         .route("/submit_flag", post(check_flag))
+        .route("/forbidden", get(forbidden))
         .nest_service("/download", ServeDir::new("./templates/downloads"))
+        .route("/api/set_challenge_hidden", post(set_challenge_hidden))
+        .route("/api/create_challenge", post(create_challenge))
         .route("/api/check_valid_jwt", post(check_valid_jwt))
         .route("/api/get_jwt_details", post(get_jwt_details))
         .route("/api/get_user_details", post(get_user_details)) 

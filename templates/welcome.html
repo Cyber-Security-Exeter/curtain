@@ -46,39 +46,22 @@
       }
       error.innerHTML = message;
     }
-
-    function submit_data(json) {
-      fetch("/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: json,
-      })
-        .then((response) => response.json())
-        .then((data) => {
-          let jsondata = JSON.parse(data);
-          if (jsondata["status"] != "ok") {
-            add_error_message(jsondata["status"]);
-          } else {
-            sessionStorage.setItem("super_secret_dont_touch", jsondata["jwt"]);
-            Cookies.set("super_secret_dont_touch", jsondata["jwt"], {
-              expires: 7,
-              path: "",
-            });
-            window.location.replace("/home");
-          }
-        })
-        .catch((error) => {
-          add_error_message(JSON.parse(error)["status"]);
-        });
-    }
-
-    form.addEventListener("submit", function (event) {
+    form.addEventListener("submit", async function (event) {
       event.preventDefault();
       const data = new FormData(form);
       const form_object = form_data_to_object(data);
-      submit_data(JSON.stringify(form_object));
+      let jsondata = await submit_data(JSON.stringify(form_object), "/login");
+      console.log(jsondata);
+      if (jsondata["status"] != "ok") {
+        add_error_message(jsondata["status"]);
+      } else {
+        sessionStorage.setItem("super_secret_dont_touch", jsondata["jwt"]);
+        Cookies.set("super_secret_dont_touch", jsondata["jwt"], {
+          expires: 7,
+          path: "",
+        });
+        window.location.replace("/home");
+      }
     });
   </script>
 </html>
