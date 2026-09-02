@@ -65,7 +65,7 @@
         }
         error.innerHTML = message;
       }
-      function submit_data(json) {
+      function submit_data(json, dir) {
         fetch(dir, {
           method: "POST",
           headers: {
