@@ -35,7 +35,10 @@ use authentication::{
     decode_jwt,
     create_jwt,
     AdvancedUser,
-    is_admin
+    is_admin,
+    UserExpanded,
+    get_users,
+    get_user_by_id
 };
 
 
@@ -45,6 +48,7 @@ struct CreateUser {
     email: String,
     password: String,
 }
+
 
 #[derive(Deserialize, Debug)]
 struct CreateTeam {
@@ -104,6 +108,14 @@ struct Team {
     name: String,
     points: i32
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct MakeAdmin {
+    id: String,
+    isadmin: bool,
+    jwt: String,
+}
+
 
 
 struct HtmlTemplate<T>(T);
@@ -274,6 +286,21 @@ async fn check_flag(Json(flag): Json<Flag>) -> impl IntoResponse {
     }
     return Json("{\"status\": \"ok\", \"correct\": false}".to_owned());
 
+}
+
+
+
+async fn make_admin(Json(user): Json<MakeAdmin>) -> impl IntoResponse {
+    let conn: Connection = Connection::open("userdata.db").unwrap();
+    dbinit();
+    if (is_admin(user.jwt)) {
+        let olduser = get_user_by_id(user.id.clone());
+        conn.execute("UPDATE users SET permissions=?1 WHERE id=?2", [if user.isadmin {"1"} else {"0"}, &user.id]).unwrap();
+        if (user.isadmin as i32 & 1 == olduser.unwrap().permissions & 1) {
+            conn.execute("UPDATE users SET session_id=NULL WHERE id=?1", [user.id]).unwrap();
+        }
+    }
+    return Json("{\"status\": \"ok\"}".to_owned());
 }
 
 async fn get_user_details(Json(jwt): Json<JWT>) -> impl IntoResponse {
@@ -550,6 +577,32 @@ async fn admin_hide_challenge(cookie: CookieManager) -> Response {
     Redirect::to("/").into_response()
 }
 
+
+#[derive(Template)]
+#[template(path = "giveadmin.html")]
+struct GiveAdminTemplate<'a> {
+    users: Vec<&'a UserExpanded>,
+}
+
+async fn give_admin(cookie: CookieManager) -> Response {
+    let mut users = get_users();
+    let mut userrefs = vec![];
+    for user in users.iter() {
+        userrefs.push(user);
+    }
+    if cookie.get("super_secret_dont_touch").is_some() {
+        let user = get_user_details_internal(cookie.get("super_secret_dont_touch").unwrap().value().to_owned());
+        if user.is_some() {
+            if (is_admin(cookie.get("super_secret_dont_touch").unwrap().value().to_owned())) {
+                let template = GiveAdminTemplate { users: userrefs };
+                return HtmlTemplate(template).into_response();
+            }
+            return Redirect::to("/forbidden").into_response();
+        }
+    }
+    Redirect::to("/").into_response()
+}
+
 async fn generalcss() -> impl IntoResponse {
     let file = read_file("./templates/static/general.css");
     Css(file)
@@ -576,6 +629,7 @@ async fn main() {
         .route("/login", post(login))
         .route("/admin/create_challenge", get(admin_create_challenge))
         .route("/admin/hide_challenge", get(admin_hide_challenge))
+        .route("/admin/give_admin", get(give_admin))
         .route("/admin", get(|| async { Redirect::to("/admin/create_challenge") }))
         .route("/admin/", get(|| async { Redirect::to("/admin/create_challenge") }))
         .route("/create_team", post(create_team))
@@ -590,6 +644,7 @@ async fn main() {
         .nest_service("/download", ServeDir::new("./templates/downloads"))
         .route("/api/set_challenge_hidden", post(set_challenge_hidden))
         .route("/api/create_challenge", post(create_challenge))
+        .route("/api/make_admin", post(make_admin)) 
         .route("/api/check_valid_jwt", post(check_valid_jwt))
         .route("/api/get_jwt_details", post(get_jwt_details))
         .route("/api/get_user_details", post(get_user_details)) 
