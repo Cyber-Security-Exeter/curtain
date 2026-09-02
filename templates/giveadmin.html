@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <title>Curtain</title>
+    <link rel="stylesheet" href="/static/general.css" />
+    <script src="/static/general.js "></script>
+  </head>
+  <body>
+    <div w3-include-html="/items/navbar.html"></div>
+    <div class="center base">
+      <div class="top-down card center-rows">
+        <form
+          class="center-rows top-down space-between"
+          style="gap: 10px"
+          id="adminform"
+        >
+          {% for user in users %}
+          <div class="left-right">
+            <h1>{{user.username}}</h1>
+            <input
+              id="{{user.id}}"
+              type="checkbox"
+              name="{{user.id}}"
+              value="{{user.username}}"
+              {% if user.isadmin %}
+              checked
+              {% endif %}
+            />
+          </div>
+          {% endfor %}
+          <input class="login-button" type="submit" value="Make admin" />
+        </form>
+      </div>
+    </div>
+    <script>
+      const form = document.getElementById("adminform");
+
+      const users = [
+          {% for user in users %}
+            "{{user.id}}",
+          {% endfor %}];
+
+      let error = null;
+      function add_error_message(message) {
+        if (error == null) {
+          error = document.createElement("span");
+          form.appendChild(error);
+        }
+        error.innerHTML = message;
+      }
+
+      form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        const data = new FormData(form);
+        const form_object = form_data_to_object(data);
+        form_object["jwt"] = get_cookies()["super_secret_dont_touch"];
+        users.forEach(async function (element) {
+          const checked = document.getElementById(element).checked;
+          form_object["id"] = element;
+          form_object["isadmin"] = checked;
+          let jsondata = await submit_data(JSON.stringify(form_object), "/api/make_admin");
+          if (jsondata["status"] != "ok") {
+            add_error_message(jsondata["status"]);
+          } else {
+            window.location.replace("/admin/give_admin");
+          }
+        });
+      });
+    </script>
+  </body>
+</html>

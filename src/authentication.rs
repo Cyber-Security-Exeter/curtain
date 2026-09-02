@@ -46,7 +46,17 @@ pub struct AdvancedUser {
     pub uuid: String,
     pub username: String,
     pub teamname: String,
-    pub teamid: String
+    pub teamid: String,
+    pub permissions: i32
+}
+
+#[derive(Deserialize, Debug)]
+pub struct UserExpanded {
+    pub id: String,
+    pub username: String,
+    pub email: String,
+    pub password: String,
+    pub isadmin: bool,
 }
 
 pub fn create_jwt(user: &mut User) -> String {
@@ -84,6 +94,56 @@ pub fn check_valid_jwt_internal(jwt: String) -> bool {
     status
 }
 
+pub fn get_user_by_id(id: String) -> Option<AdvancedUser> {
+    let conn: Connection = Connection::open("userdata.db").unwrap();
+    dbinit();
+    let mut prestmt = conn.prepare("SELECT users.id, users.username, teams.teamname, users.team_id, users.permissions FROM users INNER JOIN teams ON users.team_id = teams.id WHERE users.id=?1");
+    let mut stmt = prestmt.unwrap();
+    let mut rows = stmt.query_map([id.clone()], |row| {
+        Ok(
+            AdvancedUser {
+                status: "ok".to_owned(),
+                uuid: row.get(0)?,
+                username: row.get(1)?,
+                teamname: row.get(2)?,
+                teamid: row.get(3)?,
+                permissions: row.get(4)?
+            }
+        )
+    });
+    match rows {
+        Ok(value) => {
+            for newuser in value {
+                return Some(newuser.unwrap());
+            }
+        },
+        Err(e) => {;},
+    }
+    let mut newprestmt = conn.prepare("SELECT users.id, users.username, users.permissions FROM users WHERE users.id=?1");
+    let mut newstmt = newprestmt.unwrap();
+    let mut newrows = newstmt.query_map([id], |newrow| {
+        Ok(
+            AdvancedUser {
+                status: "ok".to_owned(),
+                uuid: newrow.get(0)?,
+                username: newrow.get(1)?,
+                teamname: "".to_owned(),
+                teamid: "".to_owned(),
+                permissions: newrow.get(2)?,
+            }
+        )
+    });
+    match newrows {
+        Ok(value) => {
+            for newuser in value {
+                return Some(newuser.unwrap());
+            }
+        },
+        Err(e) => {;},
+    }
+    None
+}
+
 pub fn get_user_details_internal(jwt: String) -> Option<AdvancedUser> {
     let conn: Connection = Connection::open("userdata.db").unwrap();
     dbinit();
@@ -103,49 +163,7 @@ pub fn get_user_details_internal(jwt: String) -> Option<AdvancedUser> {
         }
     }
     if status == "ok" {
-        let mut prestmt = conn.prepare("SELECT users.id, users.username, teams.teamname, users.team_id FROM users INNER JOIN teams ON users.team_id = teams.id WHERE users.id=?1");
-        let mut stmt = prestmt.unwrap();
-        let mut rows = stmt.query_map([format!("{}", decoded_jwt.uuid)], |row| {
-            Ok(
-                AdvancedUser {
-                    status: "ok".to_owned(),
-                    uuid: row.get(0)?,
-                    username: row.get(1)?,
-                    teamname: row.get(2)?,
-                    teamid: row.get(3)?,
-                }
-            )
-        });
-        match rows {
-            Ok(value) => {
-                for newuser in value {
-                    return Some(newuser.unwrap());
-                }
-            },
-            Err(e) => println!("Error: {}", e),
-        }
-        println!("bad");
-        let mut newprestmt = conn.prepare("SELECT users.id, users.username FROM users WHERE users.id=?1");
-        let mut newstmt = newprestmt.unwrap();
-        let mut newrows = newstmt.query_map([format!("{}", decoded_jwt.uuid)], |newrow| {
-            Ok(
-                AdvancedUser {
-                    status: "ok".to_owned(),
-                    uuid: newrow.get(0)?,
-                    username: newrow.get(1)?,
-                    teamname: "".to_owned(),
-                    teamid: "".to_owned(),
-                }
-            )
-        });
-        match newrows {
-            Ok(value) => {
-                for newuser in value {
-                    return Some(newuser.unwrap());
-                }
-            },
-            Err(e) => println!("Error: {}", e),
-        }
+        return get_user_by_id(format!("{}", decoded_jwt.uuid));
     }
 
     None
@@ -154,4 +172,26 @@ pub fn get_user_details_internal(jwt: String) -> Option<AdvancedUser> {
 pub fn is_admin(jwt: String) -> bool {
     let decoded_jwt = decode_jwt(&(jwt));
     return (decoded_jwt.permissions & 1) == 1;
+}
+
+pub fn get_users() -> Vec<UserExpanded> {
+    let conn: Connection = Connection::open("userdata.db").unwrap();
+    dbinit();
+    let mut users = vec![];
+    let mut stmt = conn.prepare("SELECT id, username, email, password, permissions FROM users").unwrap();
+    let rows = stmt.query_map([], |row| {
+        Ok (
+            UserExpanded {
+                id: row.get(0)?,
+                username: row.get(1)?,
+                email: row.get(2)?,
+                password: row.get(3)?,
+                isadmin: ( (row.get::<usize, i32>(4).unwrap() as i32 & 1) as i32 == 1 as i32) as bool,
+            }
+        )
+    }).unwrap();
+    for row in rows {
+        users.push(row.unwrap());
+    }
+    users
 }
