@@ -3,3 +3,4 @@ userdata.db
 .env
 Cargo.lock
 .vscode/
+everything.log

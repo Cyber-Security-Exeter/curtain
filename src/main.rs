@@ -26,6 +26,8 @@ use std::path::PathBuf;
 use tower_http::services::ServeDir;
 use serde_json::json;
 use tower::ServiceBuilder;
+use axum_client_ip::{ClientIp, ClientIpSource};
+use sha256::{digest, try_digest};
 pub mod authentication;
 use authentication::{
     User,
@@ -40,7 +42,11 @@ use authentication::{
     get_users,
     get_user_by_id
 };
-
+pub mod logging;
+use logging::{
+    log_user_page_access,
+    log_login_attempt
+};
 
 #[derive(Deserialize, Debug)]
 struct CreateUser {
@@ -138,14 +144,14 @@ where
 
 pub fn dbinit() {
     let conn: Connection = Connection::open("userdata.db").unwrap();
-    let result = conn.execute(
+    conn.execute(
         "CREATE TABLE IF NOT EXISTS teams (
             id TEXT PRIMARY KEY,
             teamname TEXT NOT NULL UNIQUE
         )",
         [],
     );
-    let result = conn.execute(
+    conn.execute(
         "CREATE TABLE IF NOT EXISTS challenges (
             id TEXT PRIMARY KEY,
             challengename TEXT NOT NULL UNIQUE,
@@ -158,7 +164,7 @@ pub fn dbinit() {
         )",
         [],
     );
-    let result = conn.execute(
+    conn.execute(
         "CREATE TABLE IF NOT EXISTS challengecompletions (
             id TEXT PRIMARY KEY,
             teamname TEXT NOT NULL,
@@ -169,7 +175,7 @@ pub fn dbinit() {
         )",
         [],
     );
-    let result = conn.execute(
+    conn.execute(
         "CREATE TABLE IF NOT EXISTS users (
             id TEXT PRIMARY KEY,
             username TEXT NOT NULL UNIQUE,
@@ -196,9 +202,9 @@ async fn check_valid_jwt(Json(jwt): Json<JWT>) -> impl IntoResponse {
 fn get_challenges_internal() -> Vec<ChallengeButHidden> {
     let conn: Connection = Connection::open("userdata.db").unwrap();
     dbinit();
-    let mut prestmt = conn.prepare("SELECT id, challengename, points, description, hidden, challengeid, flag, linkedfiles FROM challenges");
+    let prestmt = conn.prepare("SELECT id, challengename, points, description, hidden, challengeid, flag, linkedfiles FROM challenges");
     let mut stmt = prestmt.unwrap();
-    let mut rows = stmt.query_map([], |row| {
+    let rows = stmt.query_map([], |row| {
         Ok(
             ChallengeButHidden {
                 id: row.get(0)?,
@@ -222,7 +228,7 @@ fn get_challenges_internal() -> Vec<ChallengeButHidden> {
             }
             return jsonlist;
         },
-        Err(e) => {;},
+        Err(_) => {;},
     }
     return vec![];
 }
@@ -318,7 +324,7 @@ async fn create_user(Json(createuser): Json<CreateUser>) -> impl IntoResponse {
     let session_id = Uuid::new_v4();
     let creation_result: Result<usize> = conn.execute(
         "INSERT INTO users (id, username, email, password, permissions, session_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        (format!("{}", id.as_u128()), &createuser.username, &createuser.email, &createuser.password, if (createuser.username == "admin") { 1 } else { 0 }, format!("{}", session_id.as_u128())),
+        (format!("{}", id.as_u128()), &createuser.username, &createuser.email, digest(createuser.password), if (createuser.username == "admin") { 1 } else { 0 }, format!("{}", session_id.as_u128())),
     );
     if creation_result.is_err() {
         let mut stmt = conn.prepare("SELECT id FROM users WHERE username=?1 OR email=?2").unwrap();
@@ -403,7 +409,7 @@ fn get_teams() -> Vec<Team> {
     ORDER BY SUM(challenges.points) DESC;
     ";
     let mut stmt = conn.prepare(query).unwrap();
-    let mut rows = stmt.query_map([], |row| {
+    let rows = stmt.query_map([], |row| {
         Ok(
             Team {
                 name: row.get(0)?,
@@ -424,7 +430,7 @@ async fn login(Json(createuser): Json<Login>) -> impl IntoResponse {
     dbinit();
     let mut stmt = conn.prepare("SELECT id, permissions FROM users WHERE username=?1 AND password=?2").unwrap();
     let session_id = Uuid::new_v4();
-    let mut rows: Vec<User> = stmt.query_map([createuser.username.clone(), createuser.password], |row| {
+    let mut rows: Vec<User> = stmt.query_map([createuser.username.clone(), digest(createuser.password.clone())], |row| {
         Ok(User {
             uuid: row.get::<usize, String>(0).unwrap().parse().unwrap(),
             username: createuser.username.to_owned(),
@@ -434,6 +440,7 @@ async fn login(Json(createuser): Json<Login>) -> impl IntoResponse {
         })
     }).unwrap().collect::<Result<Vec<User>, rusqlite::Error>>().unwrap();
     let size = rows.len();
+    log_login_attempt(&createuser.username.clone(), &digest(createuser.password));
     if size == 0 {
         return Json("{\"status\": \"username or password incorrect\"}".to_owned());
     }
@@ -470,16 +477,22 @@ struct HomeTemplate<'a> {
     challenges: Vec<&'a ChallengeButHidden>,
 }
 
-async fn home() -> Response {
-    let mut challenges = get_challenges_internal();
-    let mut challengecards = vec![];
-    for challenge in challenges.iter() {
-        if challenge.hidden == false {
-            challengecards.push(challenge);
+async fn home(cookie: CookieManager) -> impl IntoResponse {
+    if cookie.get("super_secret_dont_touch").is_some() {
+        let user = get_user_details_internal(cookie.get("super_secret_dont_touch").unwrap().value().to_owned()).unwrap();
+        let mut challenges = get_challenges_internal(); 
+        let mut challengecards = vec![];
+        for challenge in challenges.iter() {
+            if challenge.hidden == false {
+                challengecards.push(challenge);
+            }
         }
+        log_user_page_access("/home", &user.clone().username);
+        let template = HomeTemplate { challenges: challengecards};
+        return HtmlTemplate(template).into_response();
     }
-    let template = HomeTemplate { challenges: challengecards};
-    return HtmlTemplate(template).into_response();
+    log_user_page_access("/home", "none");
+    Redirect::to("/").into_response()
 }
 
 #[derive(askama::Template)]
@@ -488,29 +501,47 @@ struct ScoreTemplate<'a> {
     teams: Vec<&'a Team>
 }
 
-async fn scores() -> Response {
-    let teams = get_teams();
-    let mut refteams = vec![];
-    for team in teams.iter() {
-        refteams.push(team);
+async fn scores(cookie: CookieManager) -> impl IntoResponse {
+    if cookie.get("super_secret_dont_touch").is_some() {
+        let user = get_user_details_internal(cookie.get("super_secret_dont_touch").unwrap().value().to_owned()).unwrap();
+        let teams = get_teams();
+        let mut refteams = vec![];
+        for team in teams.iter() {
+            refteams.push(team);
+        }
+        log_user_page_access("/scores", &user.clone().username);
+        let template = ScoreTemplate { teams: refteams };
+        return HtmlTemplate(template).into_response();
     }
-    let template = ScoreTemplate { teams: refteams };
-    return HtmlTemplate(template).into_response();
+    log_user_page_access("/scores", "none");
+    Redirect::to("/").into_response()
 }
 
-async fn register() -> impl IntoResponse {
+async fn register(cookie: CookieManager) -> impl IntoResponse {
     let file = read_file("./templates/register.html");
     Html(file)
 }
 
-async fn about() -> impl IntoResponse {
-    let file = read_file("./templates/about.html");
-    Html(file)
+async fn about(cookie: CookieManager) -> impl IntoResponse {
+    if cookie.get("super_secret_dont_touch").is_some() {
+        let user = get_user_details_internal(cookie.get("super_secret_dont_touch").unwrap().value().to_owned()).unwrap();
+        let file = read_file("./templates/about.html");
+        log_user_page_access("/about", &user.clone().username);
+        return Html(file).into_response();
+    }
+    log_user_page_access("/about", "none");
+    Redirect::to("/").into_response()
 }
 
-async fn forbidden() -> impl IntoResponse {
-    let file = read_file("./templates/forbidden.html");
-    Html(file)
+async fn forbidden(cookie: CookieManager) -> impl IntoResponse {
+    if cookie.get("super_secret_dont_touch").is_some() {
+        let user = get_user_details_internal(cookie.get("super_secret_dont_touch").unwrap().value().to_owned()).unwrap();
+        let file = read_file("./templates/forbidden.html");
+        log_user_page_access("/forbidden", &user.clone().username);
+        return Html(file).into_response();
+    }
+    log_user_page_access("/forbidden", "none");
+    Redirect::to("/").into_response()
 }
 
 #[derive(Template)]
@@ -520,14 +551,16 @@ struct ProfileTemplate {
     teamname: String,
 }
 
-async fn profile(cookie: CookieManager) -> Response {
+async fn profile(cookie: CookieManager) -> impl IntoResponse {
     if cookie.get("super_secret_dont_touch").is_some() {
         let user = get_user_details_internal(cookie.get("super_secret_dont_touch").unwrap().value().to_owned());
         if user.is_some() {
-            let template = ProfileTemplate { username: user.clone().unwrap().username, teamname: user.unwrap().teamname };
+            let template = ProfileTemplate { username: user.clone().unwrap().username, teamname: user.clone().unwrap().teamname };
+            log_user_page_access("/profile", &user.clone().unwrap().username);
             return HtmlTemplate(template).into_response();
         }
     }
+    log_user_page_access("/profile", "none");
     Redirect::to("/").into_response()
 }
 
@@ -537,10 +570,11 @@ struct CreateChallengeTemplate {
     username: String,
 }
 
-async fn admin_create_challenge(cookie: CookieManager) -> Response {
+async fn admin_create_challenge(cookie: CookieManager) -> impl IntoResponse {
     if cookie.get("super_secret_dont_touch").is_some() {
         let user = get_user_details_internal(cookie.get("super_secret_dont_touch").unwrap().value().to_owned());
         if user.is_some() {
+            log_user_page_access("/admin_create_challenge", &user.clone().unwrap().username);
             if (is_admin(cookie.get("super_secret_dont_touch").unwrap().value().to_owned())) {
                 let template = CreateChallengeTemplate { username: user.clone().unwrap().username };
                 return HtmlTemplate(template).into_response();
@@ -548,6 +582,7 @@ async fn admin_create_challenge(cookie: CookieManager) -> Response {
             return Redirect::to("/forbidden").into_response();
         }
     }
+    log_user_page_access("/admin_create_challenge", "none");
     Redirect::to("/").into_response()
 }
 
@@ -558,7 +593,7 @@ struct ChallengeHiderTemplate<'a> {
     challenges: Vec<&'a ChallengeButHidden>
 }
 
-async fn admin_hide_challenge(cookie: CookieManager) -> Response {
+async fn admin_hide_challenge(cookie: CookieManager) -> impl IntoResponse {
     let mut challenges = get_challenges_internal();
     let mut challengecards = vec![];
     for challenge in challenges.iter() {
@@ -567,6 +602,7 @@ async fn admin_hide_challenge(cookie: CookieManager) -> Response {
     if cookie.get("super_secret_dont_touch").is_some() {
         let user = get_user_details_internal(cookie.get("super_secret_dont_touch").unwrap().value().to_owned());
         if user.is_some() {
+            log_user_page_access("/admin_hide_challenge", &user.clone().unwrap().username);
             if (is_admin(cookie.get("super_secret_dont_touch").unwrap().value().to_owned())) {
                 let template = ChallengeHiderTemplate { username: user.clone().unwrap().username, challenges: challengecards };
                 return HtmlTemplate(template).into_response();
@@ -574,6 +610,7 @@ async fn admin_hide_challenge(cookie: CookieManager) -> Response {
             return Redirect::to("/forbidden").into_response();
         }
     }
+    log_user_page_access("/admin_hide_challenge", "none");
     Redirect::to("/").into_response()
 }
 
@@ -584,7 +621,7 @@ struct GiveAdminTemplate<'a> {
     users: Vec<&'a UserExpanded>,
 }
 
-async fn give_admin(cookie: CookieManager) -> Response {
+async fn give_admin(cookie: CookieManager) -> impl IntoResponse {
     let mut users = get_users();
     let mut userrefs = vec![];
     for user in users.iter() {
@@ -593,6 +630,7 @@ async fn give_admin(cookie: CookieManager) -> Response {
     if cookie.get("super_secret_dont_touch").is_some() {
         let user = get_user_details_internal(cookie.get("super_secret_dont_touch").unwrap().value().to_owned());
         if user.is_some() {
+            log_user_page_access("/give_admin", &user.clone().unwrap().username);
             if (is_admin(cookie.get("super_secret_dont_touch").unwrap().value().to_owned())) {
                 let template = GiveAdminTemplate { users: userrefs };
                 return HtmlTemplate(template).into_response();
@@ -600,6 +638,7 @@ async fn give_admin(cookie: CookieManager) -> Response {
             return Redirect::to("/forbidden").into_response();
         }
     }
+    log_user_page_access("/give_admin", "none");
     Redirect::to("/").into_response()
 }
 
