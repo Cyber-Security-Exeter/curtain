@@ -1,27 +1,8 @@
-use tokio::{self, fs::read};
-use axum::{
-    response::{
-        IntoResponse,
-        Response,
-        Html,
-        Redirect
-    },
-    routing::{get, post},
-    Router,
-    Json,
-};
-use axum_cookie::prelude::*;
-use axum::http::StatusCode;
-use axum_extra::response::Css;
 use crate::read_file;
 use serde::{Deserialize, Serialize};
-use rusqlite::{params, Connection, Result};
-use rusqlite::fallible_streaming_iterator::FallibleStreamingIterator;
-use uuid::Uuid;
+use rusqlite::Connection;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::path::PathBuf;
-use serde_json::json;
 use crate::dbinit;
 
 
@@ -81,10 +62,10 @@ pub fn check_valid_jwt_internal(jwt: String) -> bool {
     if decoded_jwt.exp <= SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() {
         status = false;
     } else {
-        let mut prestmt = conn.prepare("SELECT id, session_id FROM users WHERE id=?1 AND session_id=?2");
+        let prestmt = conn.prepare("SELECT id, session_id FROM users WHERE id=?1 AND session_id=?2");
         let mut stmt = prestmt.unwrap();
         let mut rows = stmt.query([format!("{}", decoded_jwt.uuid), format!("{}", decoded_jwt.session_id)]).unwrap();
-        let mut rowvec = rows.next();
+        let rowvec = rows.next();
         if !rowvec.is_ok() {
             status = false;
         } else if rowvec.unwrap().is_none() {
@@ -97,9 +78,9 @@ pub fn check_valid_jwt_internal(jwt: String) -> bool {
 pub fn get_user_by_id(id: String) -> Option<AdvancedUser> {
     let conn: Connection = Connection::open("userdata.db").unwrap();
     dbinit();
-    let mut prestmt = conn.prepare("SELECT users.id, users.username, teams.teamname, users.team_id, users.permissions FROM users INNER JOIN teams ON users.team_id = teams.id WHERE users.id=?1");
+    let prestmt = conn.prepare("SELECT users.id, users.username, teams.teamname, users.team_id, users.permissions FROM users INNER JOIN teams ON users.team_id = teams.id WHERE users.id=?1");
     let mut stmt = prestmt.unwrap();
-    let mut rows = stmt.query_map([id.clone()], |row| {
+    let rows = stmt.query_map([id.clone()], |row| {
         Ok(
             AdvancedUser {
                 status: "ok".to_owned(),
@@ -117,11 +98,11 @@ pub fn get_user_by_id(id: String) -> Option<AdvancedUser> {
                 return Some(newuser.unwrap());
             }
         },
-        Err(e) => {;},
+        Err(_) => {},
     }
-    let mut newprestmt = conn.prepare("SELECT users.id, users.username, users.permissions FROM users WHERE users.id=?1");
+    let newprestmt = conn.prepare("SELECT users.id, users.username, users.permissions FROM users WHERE users.id=?1");
     let mut newstmt = newprestmt.unwrap();
-    let mut newrows = newstmt.query_map([id], |newrow| {
+    let newrows = newstmt.query_map([id], |newrow| {
         Ok(
             AdvancedUser {
                 status: "ok".to_owned(),
@@ -139,7 +120,7 @@ pub fn get_user_by_id(id: String) -> Option<AdvancedUser> {
                 return Some(newuser.unwrap());
             }
         },
-        Err(e) => {;},
+        Err(_) => {},
     }
     None
 }
@@ -152,10 +133,10 @@ pub fn get_user_details_internal(jwt: String) -> Option<AdvancedUser> {
     if decoded_jwt.exp <= SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() {
         status = "bad";
     } else {
-        let mut prestmt = conn.prepare("SELECT id, session_id FROM users WHERE id=?1 AND session_id=?2");
+        let prestmt = conn.prepare("SELECT id, session_id FROM users WHERE id=?1 AND session_id=?2");
         let mut stmt = prestmt.unwrap();
         let mut rows = stmt.query([format!("{}", decoded_jwt.uuid), format!("{}", decoded_jwt.session_id)]).unwrap();
-        let mut rowvec = rows.next();
+        let rowvec = rows.next();
         if !rowvec.is_ok() {
             status = "bad";
         } else if rowvec.unwrap().is_none() {
